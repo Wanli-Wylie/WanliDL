@@ -39,6 +39,7 @@ class Alignment:
             super(Alignment.VisionTextGeneration, self).__init__()
             # Project the vision feature to 4096 dimensions
             self.llama = llama
+            self.tokenizer = tokenizer
             self.projection = nn.Linear(input_dim, 4096)
 
         def forward(self, vision_feature):
@@ -46,12 +47,10 @@ class Alignment:
 
             llama_feature = self.llama.model(inputs_embeds=self.projection(vision_feature))
 
-            lm_result = self.llama.lm_head(llama_feature.last_hidden_state)[:, -1, :].unsqueeze(1)
-
-            predicted_tokens = torch.argmax(lm_result, dim=-1)
+            predicted_tokens_logits = self.llama.lm_head(llama_feature.last_hidden_state)[:, -1, :].unsqueeze(1)
 
             # Already logit
-            return predicted_tokens
+            return predicted_tokens_logits
 
     class SequenceTextGeneration(nn.Module):
         def __init__(self, llama, tokenizer):
@@ -59,15 +58,9 @@ class Alignment:
             self.llama = llama
             self.tokenizer = tokenizer
 
-        def forward(self, previous_text):
-            '''
-            
-            Inputs:
-            - previous_text: The text generated so far, shape: B x T
-            
-            '''
+        def forward(self, previous_tokens):
 
-            lm_result = self.llama(self.tokenizer(previous_text, add_special_tokens=True, return_tensors='pt', truncation=True))
+            lm_result = self.llama(previous_tokens).logits
 
             predicted_tokens = torch.argmax(lm_result, dim=-1)
 
@@ -84,14 +77,17 @@ class Alignment:
         for name, param in self.llama.named_parameters():
             param.requires_grad = False
 
-        self.vision_text_generation = self.VisionTextGeneration(self.llama, input_dim)
+        self.vision_text_generation = self.VisionTextGeneration(self.llama, self.tokenizer, input_dim)
 
         self.sequence_text_generaton = self.SequenceTextGeneration(self.llama, tokenizer)
 
         self.vision_text_similarity = self.VisionTextSimilarity(input_dim)
 
-    def append_text(self, previous_text, current_text):
-        return torch.concat([previous_text, current_text], dim=1)
+    def autoregression(self, previous_tokens, predicted_tokens_logits):
+
+        predicted_tokens = torch.argmax(predicted_tokens_logits, dim=-1)
+
+        return torch.concat([previous_tokens, predicted_tokens], dim=1)
 
     def generation_loss(self, vision_feature, reference_text):
         # Generate text from vision feature
@@ -99,11 +95,15 @@ class Alignment:
 
         loss_list = []
 
-        for i in range(10):
-            
-            generated_text = self.append_text(generated_text, self.sequence_text_generaton(generated_text))
+        batch_size, sequence_length = reference_text.shape
 
-            loss_list.append(F.cross_entropy(generated_text, reference_text[i]))
+        for i in range(sequence_length):
+
+            predicted_tokens_logits = self.sequence_text_generaton(generated_text)
+
+            loss_list.append(F.cross_entropy(predicted_tokens_logits, reference_text[:, i]))
+            
+            generated_text = self.autoregression(generated_text, predicted_tokens_logits)
 
         return loss_list
 
@@ -138,13 +138,13 @@ if __name__ == "__main__":
 
     llama_tokenizer = AutoTokenizer.from_pretrained("./pretrained/Meta-Llama-3-8B-Instruct")
 
-    test_string = llama_tokenizer("This is a test string either", add_special_tokens=True, return_tensors='pt', truncation=True)
+    test_string = llama_tokenizer("This is a test string", add_special_tokens=True, return_tensors='pt', truncation=True)
 
     alignment = Alignment(llama, 2048, llama_tokenizer)
 
-    vision_feature = torch.randn(2, 10, 2048)
+    vision_feature = torch.randn(1, 10, 2048)
 
-    print(alignment.vision_text_generation(vision_feature).shape)
+    print(alignment.generation_loss(vision_feature, test_string["input_ids"]))
 
     # vision_feature = torch.randn(2, 2048)
     # text_features = torch.randn(2, 5, 768)
