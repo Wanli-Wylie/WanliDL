@@ -1,34 +1,9 @@
-from transformers import BertModel, BertTokenizer, AutoTokenizer, AutoModel
+from transformers import BertModel, BertTokenizer, AutoTokenizer, AutoModelForCausalLM
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 class Alignment:
-
-    class LlamaTextGeneration(nn.Module):
-        def __init__(self, llama, input_dim):
-            super(Alignment.LlamaTextGeneration, self).__init__()
-            self.llama = llama
-
-            # Assume the embedding size of the LLaMA model is known (4096 in your case)
-            self.adapter_layer = nn.Linear(input_dim, 4096)
-
-            # The name of the adapter layer should be the same as the name of the embedding layer in the LLaMA model
-            self.llama.embed_tokens = self.adapter_layer
-
-            # Freeze all original parameters of the LLaMA model
-            for name, param in self.llama.named_parameters():
-                param.requires_grad = False
-
-            self.llama.embed_tokens.requires_grad = True
-
-        def forward(self, x):
-            # Pass input through adapter layer then through the rest of the LLaMA model
-            return self.llama(x)
-
-        def get_trainable_parameters(self):
-            # Returns an iterator over the adapter layer parameters, which are trainable
-            return self.adapter_layer.parameters()
 
     class VisionTextSimilarity(nn.Module):
         def __init__(self, input_dim):
@@ -59,10 +34,78 @@ class Alignment:
 
             return pairwise_similarity
 
-    def __init__(self, llama, input_dim, tokenizer_path):
-#        self.llama_text_generaton = self.LlamaTextGeneration(llama, input_dim)
+    class VisionTextGeneration(nn.Module):
+        def __init__(self, llama, tokenizer, input_dim):
+            super(Alignment.VisionTextGeneration, self).__init__()
+            # Project the vision feature to 4096 dimensions
+            self.llama = llama
+            self.projection = nn.Linear(input_dim, 4096)
+
+        def forward(self, vision_feature):
+            # Project vision feature to 768 dimensions
+
+            llama_feature = self.llama.model(inputs_embeds=self.projection(vision_feature))
+
+            lm_result = self.llama.lm_head(llama_feature.last_hidden_state)[:, -1, :].unsqueeze(1)
+
+            predicted_tokens = torch.argmax(lm_result, dim=-1)
+
+            # Already logit
+            return predicted_tokens
+
+    class SequenceTextGeneration(nn.Module):
+        def __init__(self, llama, tokenizer):
+            super(Alignment.SequenceTextGeneration, self).__init__()
+            self.llama = llama
+            self.tokenizer = tokenizer
+
+        def forward(self, previous_text):
+            '''
+            
+            Inputs:
+            - previous_text: The text generated so far, shape: B x T
+            
+            '''
+
+            lm_result = self.llama(self.tokenizer(previous_text, add_special_tokens=True, return_tensors='pt', truncation=True))
+
+            predicted_tokens = torch.argmax(lm_result, dim=-1)
+
+            return predicted_tokens
+
+    def __init__(self, llama, input_dim, tokenizer):
+
+        self.llama = llama
+
+        self.tokenizer = tokenizer
+
+        # Freeze all original parameters of the LLaMA model
+
+        for name, param in self.llama.named_parameters():
+            param.requires_grad = False
+
+        self.vision_text_generation = self.VisionTextGeneration(self.llama, input_dim)
+
+        self.sequence_text_generaton = self.SequenceTextGeneration(self.llama, tokenizer)
+
         self.vision_text_similarity = self.VisionTextSimilarity(input_dim)
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+
+    def append_text(self, previous_text, current_text):
+        return torch.concat([previous_text, current_text], dim=1)
+
+    def generation_loss(self, vision_feature, reference_text):
+        # Generate text from vision feature
+        generated_text = self.vision_text_generation(vision_feature)
+
+        loss_list = []
+
+        for i in range(10):
+            
+            generated_text = self.append_text(generated_text, self.sequence_text_generaton(generated_text))
+
+            loss_list.append(F.cross_entropy(generated_text, reference_text[i]))
+
+        return loss_list
 
     def _compute_matching_loss(self, pairwise_similarity, margin=1.0):
         # Convert similarity to distance (assuming higher similarity means lower distance)
@@ -88,26 +131,25 @@ class Alignment:
         loss = self._compute_matching_loss(pairwise_similarity, margin)
 
         return loss
-    
-    # def generation_loss(self, vision_feature, ground_truth_text):
-    #     # Generate text features from vision feature
-    #     generated_text = self.llama_text_generaton(vision_feature)
-
-    #     # Tokenize the generated text
-    #     generated_text = self.tokenizer(ground_truth_text, return_tensors='pt', padding=True, truncation=True)
-
-    #     # Compute the loss between generated text and ground truth text features
-    #     loss = F.cross_entropy(generated_text, text_features)
-
-    #     return loss
 
 if __name__ == "__main__":
-    alignment = Alignment(None, 2048, "./pretrained/bert-base-uncased")
 
-    vision_feature = torch.randn(2, 2048)
-    text_features = torch.randn(2, 5, 768)
+    llama = AutoModelForCausalLM.from_pretrained("./pretrained/Meta-Llama-3-8B-Instruct")
 
-    loss = alignment.matching_loss(vision_feature, text_features)
+    llama_tokenizer = AutoTokenizer.from_pretrained("./pretrained/Meta-Llama-3-8B-Instruct")
+
+    test_string = llama_tokenizer("This is a test string either", add_special_tokens=True, return_tensors='pt', truncation=True)
+
+    alignment = Alignment(llama, 2048, llama_tokenizer)
+
+    vision_feature = torch.randn(2, 10, 2048)
+
+    print(alignment.vision_text_generation(vision_feature).shape)
+
+    # vision_feature = torch.randn(2, 2048)
+    # text_features = torch.randn(2, 5, 768)
+
+    # loss = alignment.matching_loss(vision_feature, text_features)
 
     # llama = AutoModel.from_pretrained("./models/llama")
 
