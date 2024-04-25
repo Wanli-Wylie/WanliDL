@@ -1,1 +1,1 @@
-from .jsonl_data_loader_factory import JSONLDataLoaderFactory
+from .jsonl import JSONLDataLoaderFactory

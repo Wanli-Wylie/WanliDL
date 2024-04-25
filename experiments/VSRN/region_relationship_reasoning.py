@@ -2,11 +2,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import json
+
 class RegionRelationshipReasoning(nn.Module):
     def __init__(self, D):
         super(RegionRelationshipReasoning, self).__init__()
         # Number of regions and dimension of embeddings
         
+        self.proj = nn.Linear(4096, D, bias=False)
+
         self.D = D
 
         # Embedding layers for each image region vi and vj
@@ -20,6 +24,8 @@ class RegionRelationshipReasoning(nn.Module):
     def forward(self, V):
         # V: Input features of regions (batch_size, num_regions, D)
         
+        V = self.proj(V)
+
         # Calculate embeddings
         Phi_V = self.phi(V)  # Shape: (batch_size, num_regions, D)
         Pho_V = self.pho(V)  # Shape: (batch_size, num_regions, D)
@@ -41,15 +47,16 @@ class RegionRelationshipReasoning(nn.Module):
 if __name__ == "__main__":
     # Set random seed for reproducibility
     torch.manual_seed(0)
+
+    with open("./datasets/vision/Flickr30k/vision_features/2753531542.json") as f:
+        test_feature = json.load(f)
+
+    test_feature['region_features'] = torch.tensor(test_feature['region_features']).unsqueeze(0)
+
+    print(test_feature['region_features'].shape)
     
     # Create a model
-    model = RegionRelationshipReasoning(D=128)
+    model = RegionRelationshipReasoning(D=2048)
     
-    # Generate some random input data
-    V = torch.randn(2, 10, 128)  # (batch_size=2, num_regions=10, embedding_dim=128
+    print(model(test_feature['region_features']).shape)
     
-    # Forward pass
-    V_star = model(V)
-    
-    print("Input shape:", V.shape)
-    print("Output shape:", V_star.shape)

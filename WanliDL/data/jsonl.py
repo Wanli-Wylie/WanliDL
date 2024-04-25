@@ -4,8 +4,10 @@ from transformers import AutoTokenizer
 from torch.utils.data import DataLoader, Dataset
 from torch.nn.utils.rnn import pad_sequence
 
-from scripts.services import DatasetManagementService, ConfigurationService
-from scripts.data.interfaces import IDatasetOperations, IDataLoaderFactory
+import sys
+sys.path.append('.')
+from WanliDL.services import DatasetManagementService, ConfigurationService
+from WanliDL.data.interfaces import IDatasetOperations, IDataLoaderFactory
 
 config_service = ConfigurationService()
 
