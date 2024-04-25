@@ -15,8 +15,6 @@ class GlobalSemanticReasoning(nn.Module):
         # Squeeze the first dimension (num_layers*num_directions) for the final output
         return h_n.squeeze(0)
     
-
-    
 if __name__ == "__main__":
     # Set random seed for reproducibility
     torch.manual_seed(0)

@@ -91,10 +91,10 @@ def process_images(image_dir, output_dir, model, feature_store):
 
 if __name__ == '__main__':
     model = fasterrcnn_resnet50_fpn_v2(pretrained=True).eval().cuda()
-    image_dir = './datasets/vision/Flickr30k/images/Flickr30k'
-    output_dir = './datasets/vision/Flickr30k/vision_features'
+    image_dir = './datasets/vision/MSCOCO/train2014'
+    output_dir = './datasets/vision/MSCOCO/train2014/vision_features'
     
-    feature_store = FasterRCNNFeatureStore(db_path='./datasets/vision/Flickr30k/features.sqlite')
+    feature_store = FasterRCNNFeatureStore(db_path='./datasets/vision/MSCOCO/train2014_features.sqlite')
     try:
         process_images(image_dir, output_dir, model, feature_store)
     finally:
