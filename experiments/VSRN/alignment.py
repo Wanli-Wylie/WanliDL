@@ -9,14 +9,14 @@ class Alignment:
         def __init__(self, input_dim):
             super(Alignment.VisionTextSimilarity, self).__init__()
             # Project the vision feature to 768 dimensions
-            self.projection = nn.Linear(input_dim, 768)
+            self.proj = nn.Linear(input_dim, 768)
 
         def forward(self, vision_feature, text_feature):
             # vision_feature shape: B, input_dim
             # text_feature shape: B, 5, 768
 
             # Project vision feature to 768 dimensions
-            vision_projected = self.projection(vision_feature)  # Output shape: B, 768
+            vision_projected = self.proj(vision_feature)  # Output shape: B, 768
 
             # We need to calculate the pairwise similarity measure between each pair of vision and text features
             # vision_projected is B x 768, text_feature is B x 5 x 768
