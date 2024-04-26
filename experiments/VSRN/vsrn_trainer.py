@@ -1,23 +1,24 @@
-import os
-import uuid
 from ignite.engine import Engine, Events
 from ignite.handlers import ModelCheckpoint
 from ignite.contrib.handlers import ProgressBar
 from WanliDL.engines import BaseTrainer
-
+import os
 import sys
+import torch
+
 sys.path.append('.')
 from WanliDL.services import ModelCheckpointService, ConfigurationService
 
 model_checkpoint_service = ModelCheckpointService()
 config_service = ConfigurationService()
 
-class Trainer(BaseTrainer):
-    def __init__(self, model, optimizer, scheduler, loss_fn, train_loader, logger, config, checkpoint_service=model_checkpoint_service):
+class VSRNTrainer(BaseTrainer):
+    def __init__(self, model, optimizer, scheduler, train_loader, logger, config, checkpoint_service=model_checkpoint_service):
+        super().__init__(model, optimizer, scheduler, None, train_loader, logger, config, checkpoint_service)
+
         self.model = model.to(config.get('device', 'cuda'))
         self.optimizer = optimizer
         self.scheduler = scheduler
-        self.loss_fn = loss_fn
         self.train_loader = train_loader
         self.logger = logger
         self.config = config
@@ -29,17 +30,29 @@ class Trainer(BaseTrainer):
     def step(self, engine, batch):
         self.model.train()
         self.optimizer.zero_grad()
-        input_ids = batch['input_ids'].to(self.device)
-        attention_mask = batch.get('attention_mask', None).to(self.device) if 'attention_mask' in batch else None
-        labels = batch['labels'].to(self.device)
+
+        region_features = batch['region_features'].to(self.device)
+        input_ids = batch['input_ids']
+        attention_mask = batch['attention_mask']
         
-        output = self.model(input_ids, attention_mask=attention_mask)
-        loss = self.loss_fn(output.float(), labels.float())
-        loss.backward()
+        vision_feature = self.model(region_features)
+        total_loss = 0
+        
+        # Compute losses for each of the 5 captions
+        for i in range(5):
+            text_feature_input_ids = input_ids[i].to(self.device)
+            text_feature_attention_mask = attention_mask[i].to(self.device)
+            
+            matching_loss = self.loss_fn_matching(vision_feature, text_feature_input_ids)
+            generation_loss = self.loss_fn_generation(vision_feature, text_feature_input_ids, text_feature_attention_mask)
+
+            total_loss += matching_loss + generation_loss
+
+        total_loss.backward()
         self.optimizer.step()
         self.scheduler.step()  # Update the learning rate
         
-        return loss.item()
+        return total_loss.item()
 
     def run(self):
         trainer = Engine(self.step)

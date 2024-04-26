@@ -19,4 +19,8 @@ class VSRN(nn.Module):
         x = self.global_semantic_reasoning(x)
         return x
     
-
+    def compute_matching_loss(self, vision_feature, text_feature):
+        return self.vision_text_matching(vision_feature, text_feature)
+    
+    def compute_generation_loss(self, vision_feature, input_ids, attention_mask):
+        return self.vision_text_generation(vision_feature, input_ids, attention_mask)
