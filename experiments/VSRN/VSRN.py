@@ -8,10 +8,11 @@ from vision_text_matching import VisionTextMatching
 class VSRN(nn.Module):
     def __init__(self, D, bert):
         self.D = D
+        super(VSRN, self).__init__()
         self.global_semantic_reasoning = GlobalSemanticReasoning(D)
         self.region_relationship_reasoning = RegionRelationshipReasoning(D)
         self.vision_text_matching = VisionTextMatching(D)
-        self.vision_text_generation = VisionTextGeneration(bert, D)
+        self.vision_text_generation = VisionTextGeneration(D, bert)
     
     # The forward pass computes the vision feature
     def forward(self, x):

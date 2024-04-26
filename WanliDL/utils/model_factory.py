@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
-from scripts.services import ConfigurationService
 from . import IFactory
 import sys
 sys.path.append('.')
-from scripts.model.nlp import BertForBinaryClassification
+from WanliDL.services import ConfigurationService
+from WanliDL.model.nlp import BertForBinaryClassification
 
 class ModelFactory(IFactory):
     def __init__(self):

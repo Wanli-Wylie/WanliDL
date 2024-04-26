@@ -1,20 +1,24 @@
+import os
+import uuid
+from transformers import AutoTokenizer, AutoModel
 from ignite.engine import Engine, Events
 from ignite.handlers import ModelCheckpoint
 from ignite.contrib.handlers import ProgressBar
-from WanliDL.engines import BaseTrainer
-import os
+
+from VSRN import VSRN
+from data_loader_factory import VSRNDataLoaderFactory
+
 import sys
-import torch
-
 sys.path.append('.')
+from WanliDL.engines import BaseTrainer
 from WanliDL.services import ModelCheckpointService, ConfigurationService
+from WanliDL.utils import OptimizerFactory, SchedulerFactory
 
-model_checkpoint_service = ModelCheckpointService()
+# model_checkpoint_service = ModelCheckpointService()
 config_service = ConfigurationService()
 
 class VSRNTrainer(BaseTrainer):
-    def __init__(self, model, optimizer, scheduler, train_loader, logger, config, checkpoint_service=model_checkpoint_service):
-        super().__init__(model, optimizer, scheduler, None, train_loader, logger, config, checkpoint_service)
+    def __init__(self, model, optimizer, scheduler, train_loader, logger, config, checkpoint_service=None):
 
         self.model = model.to(config.get('device', 'cuda'))
         self.optimizer = optimizer
@@ -43,14 +47,14 @@ class VSRNTrainer(BaseTrainer):
             text_feature_input_ids = input_ids[i].to(self.device)
             text_feature_attention_mask = attention_mask[i].to(self.device)
             
-            matching_loss = self.loss_fn_matching(vision_feature, text_feature_input_ids)
-            generation_loss = self.loss_fn_generation(vision_feature, text_feature_input_ids, text_feature_attention_mask)
+            matching_loss = self.model.compute_matching_loss(vision_feature, text_feature_input_ids)
+            generation_loss = self.model.compute_generation_loss(vision_feature, text_feature_input_ids, text_feature_attention_mask)
 
             total_loss += matching_loss + generation_loss
 
         total_loss.backward()
         self.optimizer.step()
-        self.scheduler.step()  # Update the learning rate
+        self.scheduler.step()  
         
         return total_loss.item()
 
@@ -95,3 +99,26 @@ class VSRNTrainer(BaseTrainer):
         trainer.run(self.train_loader, max_epochs=self.config['epoches'])
         self.logger.info("Training completed")
 
+if __name__ == "__main__":
+    model = VSRN(D=2048, bert=AutoModel.from_pretrained('./pretrained/bert-base-uncased'))
+    dataloader = VSRNDataLoaderFactory(
+        'datasets/vision/MSCOCO/train2014_features.sqlite', 
+        AutoTokenizer.from_pretrained('pretrained/bert-base-uncased'), 
+        './datasets/vision/MSCOCO/train2014_captions.json').create(1024)
+    
+    optimizer_config = {
+        'OPTIMIZER_NAME': 'Adam',
+        'BASE_LR': 0.0002,
+        'WEIGHT_DECAY': 0.0,  # Assuming no weight decay unless specified otherwise
+        'BIAS_LR_FACTOR': 1,  # No special treatment for biases
+        'WEIGHT_DECAY_BIAS': 0.0  # Assuming no separate weight decay for biases
+    }
+
+    scheduler_config = {
+        'name': 'StepLR',
+        'step_size': 15,  # Adjust the learning rate every 15 epochs
+        'gamma': 0.1      # Reduce the learning rate to one-tenth of its previous value
+    }
+
+    optimizer = OptimizerFactory().create(optimizer_config, model.parameters())
+    scheduler = SchedulerFactory().create(scheduler_config, optimizer)
