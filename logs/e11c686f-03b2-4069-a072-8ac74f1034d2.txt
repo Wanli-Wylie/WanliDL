@@ -1,0 +1,5 @@
+2024-04-27 23:11:27,033 default_id INFO: Iteration 2 - Loss: -5383.3628
+2024-04-27 23:11:37,397 default_id INFO: Iteration 4 - Loss: -8422.5039
+2024-04-27 23:11:43,316 default_id INFO: Iteration 6 - Loss: -8616.6445
+2024-04-27 23:11:50,861 default_id INFO: Iteration 8 - Loss: -8667.0449
+2024-04-27 23:11:58,657 default_id INFO: Iteration 10 - Loss: -8784.6436

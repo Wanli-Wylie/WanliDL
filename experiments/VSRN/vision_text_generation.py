@@ -28,7 +28,7 @@ class VisionTextGeneration(nn.Module):
     def forward(self, input_ids, attention_mask, features, states=None):
         # Generate embeddings from BERT
         with torch.no_grad():  # Optionally freeze BERT during training
-            embeddings = self.bert_model(input_ids, attention_mask=attention_mask)[0]  # Only take the last hidden states
+            embeddings = self.bert_model(input_ids, attention_mask=attention_mask).pooler_output.unsqueeze(1)  # Only take the last hidden states
         
         # Initialize hidden state with image features if states is None
         hidden = self.features_to_hidden(features).unsqueeze(0) if states is None else states
@@ -39,11 +39,9 @@ class VisionTextGeneration(nn.Module):
         
         return output, hidden
 
-    def generate(self, vision_feature, input_ids, tokenizer):
+    def generate(self, vision_feature, input_ids, attention_mask):
         results = []
         hidden = None
-
-        attention_mask = (input_ids != tokenizer.pad_token_id).int()
         
         for i in range(input_ids.size(1)):
             # In the first iteration, use the vision feature to initialize the hidden state

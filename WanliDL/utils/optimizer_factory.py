@@ -42,4 +42,9 @@ class OptimizerFactory(IFactory):
             {'params': [p for p in parameters if p.requires_grad and p.ndim == 1], 'lr': bias_lr, 'weight_decay': weight_decay_bias}
         ]
 
-        return self.available_optimizers[optimizer_name](param_groups, lr=base_lr, momentum=momentum, weight_decay=weight_decay)
+        if optimizer_name == 'SGD':
+            return self.available_optimizers[optimizer_name](param_groups, lr=base_lr, momentum=momentum, weight_decay=weight_decay)
+        elif optimizer_name == 'Adam':
+            return self.available_optimizers[optimizer_name](param_groups, lr=base_lr, weight_decay=weight_decay)
+
+

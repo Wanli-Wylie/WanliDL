@@ -11,7 +11,7 @@ class VSRN(nn.Module):
         super(VSRN, self).__init__()
         self.global_semantic_reasoning = GlobalSemanticReasoning(D)
         self.region_relationship_reasoning = RegionRelationshipReasoning(D)
-        self.vision_text_matching = VisionTextMatching(D)
+        self.vision_text_matching = VisionTextMatching(D, bert)
         self.vision_text_generation = VisionTextGeneration(D, bert)
     
     # The forward pass computes the vision feature
@@ -20,8 +20,8 @@ class VSRN(nn.Module):
         x = self.global_semantic_reasoning(x)
         return x
     
-    def compute_matching_loss(self, vision_feature, text_feature):
-        return self.vision_text_matching(vision_feature, text_feature)
+    def compute_matching_loss(self, vision_feature, input_ids, attention_mask):
+        return self.vision_text_matching.matching_loss(self.vision_text_matching(vision_feature, input_ids, attention_mask))
     
     def compute_generation_loss(self, vision_feature, input_ids, attention_mask):
-        return self.vision_text_generation(vision_feature, input_ids, attention_mask)
+        return self.vision_text_generation.generate(vision_feature, input_ids, attention_mask)
